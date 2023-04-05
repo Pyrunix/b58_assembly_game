@@ -42,19 +42,24 @@
 .eqv	KEY_ADDRESS	0xffff0000
 
 # Colors
-.eqv color_sky		0x000015
+.eqv color_sky		0x00ADD8E6
 .eqv color_player 	0x00ff0000
+.eqv color_red		0x00ff0000
 .eqv color_skin		0x00FEE3D4
 .eqv color_black	0x00000000
 .eqv color_platform	0x003f3f3f
 .eqv color_cell		0x00FCE205
 .eqv color_gray		0x80808080
+.eqv color_light_gray	0x00e0e0e0
+.eqv color_green	0x0000FF00
+.eqv color_dark_blue	0x001c2e4a
+
 .eqv roof		4
 
 .data
 spacer:		.space		4096
 # red:		.word 			0x00ff0000
-xPos:		.word 		8	# Player x position
+xPos:		.word 		5	# Player x position
 yPos:		.word 		45	# Player y position
 facingRight:	.word		1	# Check if player is facing right
 grounded:	.word		0	# Check if player is grounded
@@ -62,9 +67,12 @@ jumping:	.word		0	# Check if the player is jumping
 canJump:	.word		1	# Check if player can jump	
 jumpDuration:	.word		6	# How long the jump lasts for	
 lives:		.word		3	# Player lives, if 0 then game over
-hasCell:	.word		1	# Check if player has power cell
-xCell:		.word		8	# Cell x position
-yCell:		.word		47	# Cell y position
+hasCell:	.word		0	# Check if player has power cell
+xCell:		.word		18	# Cell x position
+yCell:		.word		43	# Cell y position
+xStation:	.word		5	# Station x position
+yStation:	.word		62	# Station y position
+stationOn:	.word		0	# Check if station is powered
 
 .text
 .globl main
@@ -81,7 +89,10 @@ after_key:
 	jal refresh
 	jal draw_platforms
 	jal update_player
+	jal update_objects
+	jal draw_bg_objects
 	jal draw_player
+	jal draw_objects
 	jal delay
 	j loop
 	
@@ -91,6 +102,7 @@ key_pressed:
 	lw $t2, 4($t9)
 	beq $t2, 0x61, a_key
 	beq $t2, 0x64, d_key
+	beq $t2, 0x66, f_key
 	beq $t2, 0x77, w_key
 	j after_key
 	
@@ -124,6 +136,74 @@ w_key:
 	li $t2, 10
 	sw $t2, jumpDuration
 	j after_key
+	
+f_key:
+	lw $t1, hasCell
+	beq $t1, 1, drop_cell
+pickup_cell:
+	lw $t1, xPos
+	lw $t2, yPos
+	lw $t3, xCell
+	lw $t4, yCell
+	addi $t5, $t1, 2	# Horizontal Check
+	bgt $t3, $t5, after_key
+	addi $t5, $t1, -2
+	blt $t3, $t5, after_key
+	
+	addi $t5, $t2, 2	# Vertical Check
+	bgt $t4, $t5, after_key
+	addi $t5, $t2, -2
+	blt $t4, $t5, after_key
+				
+	li $t5, 1		# Pickup Cell
+	sw $t5, hasCell
+	j after_key
+drop_cell:
+	lw $t1, xPos
+	lw $t2, yPos
+	addi $t2, $t2, -1
+	li $t5, 0
+	sw $t5, hasCell
+	sw $t1, xCell
+	sw $t2, yCell
+	j after_key
+	
+update_objects:
+	lw $t1, hasCell		# Update cell position
+	beqz $t1, update_station
+	lw $t2, xPos
+	lw $t3, yPos
+	sw $t2, xCell
+	sw $t3, yCell
+	
+update_station:
+	lw $t1, xStation	# Update station state
+	lw $t2, yStation
+	lw $t3, xCell
+	lw $t4, yCell
+	lw $t5, stationOn
+	li $t6, 0
+	sw $t6, stationOn
+	
+	
+	addi $t6, $t3, 2
+	bgt $t1, $t6, jump_back
+	addi $t6, $t3, -2
+	blt $t1, $t6, jump_back
+	addi $t6, $t4, 2
+	bgt $t2, $t6, jump_back
+	addi $t6, $t4, -2
+	blt $t2, $t6, jump_back
+	
+	move $a0, $t6
+	li $v0, 1
+	syscall
+	
+	li $t6, 1
+	sw $t6, stationOn
+	
+	
+	jr $ra
 
 update_player:
 	la $s0, BASE_ADDRESS
@@ -196,7 +276,7 @@ stopJump:
 	
 delay:
 	li $v0, 32
-	li $a0, 33
+	li $a0, 41			# Delay in milliseconds
 	syscall
 	jr $ra
 	
@@ -249,24 +329,89 @@ draw_player:
 	
 	beq $t4, 0, draw_left	# Draw facing direction
 	sw $t3, -760($s0)
-	beqz $t5, jump_back_from_draw
+	beqz $t5, jump_back
 	
 	sw $t6, -520($s0)
 	sw $t7, -264($s0)
 	sw $t7, -776($s0)
-	j jump_back_from_draw
+	j jump_back
 	
 draw_left:
 	sw $t3, -776($s0)
-	beqz $t5, jump_back_from_draw
+	beqz $t5, jump_back
 	sw $t6, -504($s0)
 	sw $t7, -248($s0)
 	sw $t7, -760($s0)
-	j jump_back_from_draw
-jump_back_from_draw:
+	j jump_back
+jump_back:
 	jr $ra
 
 draw_life:
+
+draw_objects:
+draw_power_cell:
+	lw $t1, hasCell
+	beq $t1, 1, jump_back
+	li $t7, color_cell	
+	li $t8, color_gray
+	la $s0, BASE_ADDRESS
+	lw $t1, xCell
+	lw $t2, yCell
+	li $t3, 64
+	mult $t2, $t3
+	mflo $t3
+	sll $t3, $t3, 2
+	sll $t1, $t1, 2
+	add $t1, $t1, $t3
+	
+	add $s1, $s0, $t1	# $s1 contains address of cell position
+	sw $t7, 0($s1)
+	sw $t8, 4($s1)
+	sw $t8, -4($s1)
+	
+	j jump_back
+draw_bg_objects:
+draw_station:
+	lw $t1, xStation
+	lw $t2, yStation
+	li $t3, color_sky
+	li $t4, color_dark_blue
+	li $t5, color_red
+	li $t6, color_green
+	la $s0, BASE_ADDRESS
+	li $t8, 64
+	mult $t8, $t2
+	mflo $t8
+	sll $t8, $t8, 2
+	move $t7, $t1
+	sll $t7, $t7, 2
+	add $t8, $t8, $t7
+	add $s1, $s0, $t8
+	
+	sw $t4, 0($s1)
+	sw $t4, -4($s1)
+	sw $t4, 4($s1)
+	sw $t3, -256($s1)
+	sw $t4, -260($s1)
+	sw $t4, -252($s1)
+	sw $t4, -512($s1)
+	sw $t4, -516($s1)
+	sw $t4, -508($s1)
+	sw $t4, -768($s1)
+	sw $t4, -772($s1)
+	sw $t4, -764($s1)
+	sw $t4, -1024($s1)
+	sw $t4, -1280($s1)
+	sw $t4, -1536($s1)
+	
+	
+	lw $t8, stationOn
+	beq $t8, 1, draw_station_on
+	sw $t5, -1792($s1)
+	j jump_back
+draw_station_on:
+	sw $t6, -1792($s1)
+	j jump_back
 
 draw_platforms:
 	la $s0, BASE_ADDRESS	# Load address of bitmap
