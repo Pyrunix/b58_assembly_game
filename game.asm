@@ -73,6 +73,18 @@ yCell:		.word		43	# Cell y position
 xStation:	.word		5	# Station x position
 yStation:	.word		62	# Station y position
 stationOn:	.word		0	# Check if station is powered
+xMovingPlatform:	.word	50	# Moving platform x position
+yMovingPlatform:	.word	40	# Moving platform y position
+movingPlatformRight:	.word	1	# Check if moving platform is going right
+platformTimer:		.word	2	# Delay for platform
+hit:		.word		0	# Check if player was hit
+dead:		.word		0	# Check if player has died
+xDoor:		.word		28	# Door x position
+yDoor:		.word		26	# Door y position
+xHeart:		.word		5
+yHeart:		.word		33
+hasHeart:	.word		0
+heartMovingRight:	.word	1	
 
 .text
 .globl main
@@ -88,11 +100,11 @@ loop:
 after_key:
 	jal refresh
 	jal draw_platforms
+	jal draw_bg_objects
+	jal draw_objects
 	jal update_player
 	jal update_objects
-	jal draw_bg_objects
 	jal draw_player
-	jal draw_objects
 	jal delay
 	j loop
 	
@@ -104,6 +116,7 @@ key_pressed:
 	beq $t2, 0x64, d_key
 	beq $t2, 0x66, f_key
 	beq $t2, 0x77, w_key
+	beq $t2, 0x70, p_key
 	j after_key
 	
 a_key:
@@ -137,6 +150,42 @@ w_key:
 	sw $t2, jumpDuration
 	j after_key
 	
+p_key:
+	li $t1, 5
+	sw $t1, xPos
+	li $t1, 45
+	sw $t1, yPos
+	li $t1, 3
+	sw $t1, lives
+	li $t1, 18
+	sw $t1, xCell
+	li $t1, 43
+	sw $t1, yCell
+	li $t1, 2
+	sw $t1, platformTimer
+	li $t1, 50
+	sw $t1, xMovingPlatform
+	li $t1, 40
+	sw $t1, yMovingPlatform
+	li $t1, 1
+	sw $t1, movingPlatformRight
+	li $t1, 0
+	sw $t1, jumping
+	sw $t1, hasCell
+	li $t1, 1
+	sw $t1, facingRight
+	li $t1, 6
+	sw $t1, jumpDuration
+	li $t1, 0
+	sw $t1, hasHeart
+	li $t1, 5
+	sw $t1, xHeart
+	li $t1, 33
+	sw $t1, yHeart
+	li $t1, 0
+	sw $t1, hit
+	j main
+	
 f_key:
 	lw $t1, hasCell
 	beq $t1, 1, drop_cell
@@ -169,6 +218,86 @@ drop_cell:
 	j after_key
 	
 update_objects:
+update_heart:
+	lw $t1, xHeart
+	lw $t2, yHeart
+	lw $t3, hasHeart
+	lw $t4, heartMovingRight
+	lw $a1, lives
+	beq $t3, 1, update_door
+	bge $a1, 3, move_heart
+	lw $t7, xPos
+	lw $t8, yPos
+	addi $t7, $t7, 3
+	bgt $t1, $t7, move_heart
+	addi $t7, $t7, -6
+	blt $t1, $t7, move_heart
+	addi $t8, $t8, 3
+	bgt $t2, $t8, move_heart
+	addi $t8, $t8, -6
+	blt $t2, $t8, move_heart
+	j pickup_heart
+pickup_heart:
+	li $t1, 1
+	sw $t1, hasHeart
+	lw $t1, lives
+	addi $t1, $t1, 1
+	sw $t1, lives
+	j update_door
+move_heart:
+	beqz $t4, move_heart_left
+	addi $t1, $t1, 1
+	sw $t1, xHeart
+	bgt $t1, 34, dir_heart_left
+	j update_door
+move_heart_left:
+	addi $t1, $t1, -1
+	sw $t1, xHeart
+	blt $t1, 5, dir_heart_right
+dir_heart_left:
+	li $t5, 0
+	sw $t5, heartMovingRight
+	j update_door
+dir_heart_right:
+	li $t5, 1
+	sw $t5, heartMovingRight
+	j update_door
+update_door:
+	lw $t1, xDoor
+	lw $t2, yDoor
+	lw $t3, xPos
+	lw $t4, yPos
+	bne $t1, $t3, update_moving_platform
+	bne $t2, $t4, update_moving_platform
+	j win
+update_moving_platform:
+	lw $t1, platformTimer
+	bgtz $t1, update_cell
+	lw $t1, stationOn
+	beqz $t1, update_cell
+	lw $t2, xMovingPlatform
+	lw $t3, yMovingPlatform
+	lw $t4, movingPlatformRight
+	beqz $t4, moving_platform_left
+	
+	addi $t2, $t2, 1
+	sw $t2, xMovingPlatform
+	bgt $t2, 56, dir_platform_left
+	j update_cell
+moving_platform_left:
+	addi $t2, $t2, -1
+	sw $t2, xMovingPlatform
+	blt $t2, 18, dir_platform_right
+	j update_cell
+dir_platform_right:
+	li $t4, 1
+	sw $t4, movingPlatformRight
+	j update_cell
+dir_platform_left:
+	li $t4, 0
+	sw $t4, movingPlatformRight
+	j update_cell
+update_cell:
 	lw $t1, hasCell		# Update cell position
 	beqz $t1, update_station
 	lw $t2, xPos
@@ -195,13 +324,8 @@ update_station:
 	addi $t6, $t4, -2
 	blt $t2, $t6, jump_back
 	
-	move $a0, $t6
-	li $v0, 1
-	syscall
-	
 	li $t6, 1
-	sw $t6, stationOn
-	
+	sw $t6, stationOn	
 	
 	jr $ra
 
@@ -209,6 +333,7 @@ update_player:
 	la $s0, BASE_ADDRESS
 	li $t8, 64		# Get player position
 	lw $t7, yPos
+	bgt $t7, 62, playerHit
 	mult $t8, $t7
 	mflo $t8
 	sll $t8, $t8, 2
@@ -221,12 +346,13 @@ update_player:
 	#li $t9, 0xffffffff
 	#sw $t9, 0($s1)
 	
-	lw $t1, 0($s2)
+	lw $t1, 0($s2)				# Floor detection
 	beq $t1, color_platform, on_ground
 	lw $t1, -4($s2)
 	beq $t1, color_platform, on_ground
 	lw $t1, 4($s2)
 	beq $t1, color_platform, on_ground
+after_collision_check:
 	li $t2, 0
 	sw $t2, grounded
 	sw $t2, canJump
@@ -237,8 +363,28 @@ after_falling_check:
 	lw $t1, jumping
 	beq $t1, 1, jump
 after_jump_check:
+	lw $t1, hit
+	beq $t1, 1, reset_player
 	jr $ra
 	
+
+reset_player:
+	li $t1, 5
+	li $t2, 45
+	lw $t3, lives
+	addi $t3, $t3, -1
+	sw $t3, lives
+	beqz $t3, game_over
+	sw $t1, xPos
+	sw $t2, yPos
+	sw $t3, lives
+	li $t1, 0
+	sw $t1, hit
+	j jump_back
+playerHit:
+	li $t2, 1
+	sw $t2, hit
+	j after_collision_check
 	
 fall:
 	lw $t1, jumping
@@ -275,7 +421,18 @@ stopJump:
 	
 	
 delay:
-	li $v0, 32
+delay_platform:
+	lw $t1, platformTimer
+	beqz $t1, reset_platform_timer
+	addi $t1, $t1, -1
+	sw $t1, platformTimer
+	j delay_fps
+reset_platform_timer:
+	li $t1, 2
+	sw $t1, platformTimer
+	j delay_fps
+delay_fps:
+	li $v0, 32	
 	li $a0, 41			# Delay in milliseconds
 	syscall
 	jr $ra
@@ -346,9 +503,82 @@ draw_left:
 jump_back:
 	jr $ra
 
-draw_life:
 
 draw_objects:
+draw_heart:
+	lw $t1, hasHeart
+	beq $t1, 1, draw_door
+	la $s0, BASE_ADDRESS
+	lw $t1, xHeart
+	lw $t2, yHeart
+	li $t3, color_red
+	sll $t2, $t2, 8
+	sll $t1, $t1, 2
+	add $t1, $t1, $t2
+	add $s1, $s0, $t1
+	sw $t3, 0($s1)
+	sw $t3, 4($s1)
+	sw $t3, -4($s1)
+	sw $t3, 256($s1)
+	sw $t3, -256($s1)
+	
+draw_door:
+	la $s0, BASE_ADDRESS
+	li $t3, 0xffffffff
+	lw $t1, yDoor
+	sll $t1, $t1, 8
+	lw $t2, xDoor
+	sll $t2, $t2, 2
+	add $t1, $t1, $t2
+	add $s1, $s0, $t1
+	sw $t3, 0($s1)
+	sw $t3, -4($s1)
+	sw $t3, 4($s1)
+	sw $t3, -256($s1)
+	sw $t3, -260($s1)
+	sw $t3, -252($s1)
+	sw $t3, -512($s1)
+	sw $t3, -508($s1)
+	sw $t3, -516($s1)
+	sw $t3, -768($s1)
+	sw $t3, -772($s1)
+	sw $t3, -764($s1)
+	sw $t3, -1024($s1)
+	sw $t3, -1028($s1)
+	sw $t3, -1020($s1)
+	sw $t3, -1280($s1)
+draw_life:
+	lw $t1, lives
+	li $t2, color_red
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 780
+	sw $t2, 0($s1)
+	sw $t2, -4($s1)
+	sw $t2, 4($s1)
+	sw $t2, 256($s1)
+	sw $t2, -260($s1)
+	sw $t2, -252($s1)
+	
+	blt $t1, 2, draw_power_cell
+	addi $s1, $s0, 796
+	sw $t2, 0($s1)
+	sw $t2, -4($s1)
+	sw $t2, 4($s1)
+	sw $t2, 256($s1)
+	sw $t2, -260($s1)
+	sw $t2, -252($s1)
+	
+	blt $t1, 3, draw_power_cell
+	addi $s1, $s0, 812
+	sw $t2, 0($s1)
+	sw $t2, -4($s1)
+	sw $t2, 4($s1)
+	sw $t2, 256($s1)
+	sw $t2, -260($s1)
+	sw $t2, -252($s1)
+	
+	j draw_power_cell
+	
 draw_power_cell:
 	lw $t1, hasCell
 	beq $t1, 1, jump_back
@@ -408,15 +638,42 @@ draw_station:
 	lw $t8, stationOn
 	beq $t8, 1, draw_station_on
 	sw $t5, -1792($s1)
-	j jump_back
+	j draw_moving_platform
 draw_station_on:
 	sw $t6, -1792($s1)
+draw_moving_platform:
+	lw $t1, xMovingPlatform
+	lw $t2, yMovingPlatform
+	li $t3, color_red
+	li $t4, color_green
+	li $t5, color_platform
+	lw $t8, stationOn
+	la $s0, BASE_ADDRESS
+	sll $t2, $t2, 8
+	sll $t1, $t1, 2
+	add $t1, $t2, $t1
+	add $s1, $s0, $t1
+	sw $t5, -4($s1)
+	sw $t5, -8($s1)
+	sw $t5, -12($s1)
+	sw $t5, -16($s1)
+	sw $t5, -20($s1)
+	sw $t5, -24($s1)
+	sw $t5, 4($s1)
+	sw $t5, 8($s1)
+	sw $t5, 12($s1)
+	sw $t5, 16($s1)
+	sw $t5, 20($s1)
+	sw $t5, 24($s1)
+	sw $t3, 0($s1)
+	beqz $t8, jump_back
+	sw $t4, 0($s1)
 	j jump_back
 
 draw_platforms:
 	la $s0, BASE_ADDRESS	# Load address of bitmap
 	li $t1, color_platform	# Load color of platforms
-	li $t4, 64
+	li $t4, 32
 	addi $s1, $s0, 16128	# Set $s1 to first pixel of last row
 
 floor_loop:
@@ -453,7 +710,311 @@ floor_loop:
 	sw $t1, 20($s1)
 	sw $t1, 24($s1)
 	
+	addi $s1, $s0, 8924		# Platform at 55, 34
+	sw $t1, 0($s1)
+	sw $t1, 4($s1)
+	sw $t1, 8($s1)
+	sw $t1, 12($s1)
+	
+	addi $s1, $s0, 7096		# Platform at 46, 27
+	sw $t1, 0($s1)
+	sw $t1, 4($s1)
+	sw $t1, 8($s1)
+	sw $t1, 12($s1)
+	sw $t1, -4($s1)
+	sw $t1, -8($s1)
+	sw $t1, -12($s1)
+	sw $t1, -16($s1)
+	addi $s1, $s1, -16
+	
+	sw $t1, -28($s1)
+	sw $t1, -32($s1)
+	sw $t1, -36($s1)
+	sw $t1, -40($s1)
+	sw $t1, -44($s1)
+	sw $t1, -48($s1)
+	sw $t1, -52($s1)
+	sw $t1, -56($s1)
+	sw $t1, -60($s1)
+	sw $t1, -64($s1)
+	
+	jr $ra
+
+delay_short:
+	li $v0, 32	
+	li $a0, 1			# Delay in milliseconds
+	syscall
+	jr $ra
+	
+delay_long:
+	li $v0, 32	
+	li $a0, 1500			# Delay in milliseconds
+	syscall
+	jr $ra
+
+win:	
+	jal refresh
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 0
+	addi $s2, $s0, 16380
+	li $t1, 0xffffffff
+	li $t2, 320
+draw_win:
+	sw $t1, 0($s1)
+	addi $s1, $s1, 12
+	addi $t2, $t2, -1
+	jal delay_short
+	sw $t1, 0($s2)
+	addi $s2, $s2, -12
+	jal delay_short
+	bnez $t2, draw_win
+	jal write_win
+	j end
+	
+game_over:
+	jal refresh
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 0
+	addi $s2, $s0, 16380
+	li $t1, color_black
+	li $t2, 640
+draw_bars:
+	sw $t1, 0($s1)
+	addi $s1, $s1, 4
+	addi $t2, $t2, -1
+	jal delay_short
+	sw $t1, 0($s2)
+	addi $s2, $s2, -4
+	jal delay_short
+	bnez $t2, draw_bars
+	
+	jal write_game
+	jal delay_long
+	jal write_over
+
+	j end	
+write_win:
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 7992
+	li $t1, color_green
+	sw $t1, 4($s1)		# Letter Y
+	sw $t1, -4($s1)
+	sw $t1, 256($s1)
+	sw $t1, 512($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -520($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 8($s1)		# Letter O
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 508($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -508($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 8($s1)		# Letter U
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 508($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -520($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 40
+	sw $t1, 0($s1)		# Letter W
+	sw $t1, 8($s1)	
+	sw $t1, -8($s1)
+	sw $t1, 252($s1)
+	sw $t1, 260($s1)
+	sw $t1, 248($s1)
+	sw $t1, 264($s1)
+	sw $t1, 504($s1)
+	sw $t1, 520($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -504($s1)
+	sw $t1, -520($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter I
+	sw $t1, 256($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 520($s1)
+	sw $t1, 508($s1)
+	sw $t1, 504($s1)
+	sw $t1, -256($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -520($s1)
+	sw $t1, -508($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter W
+	sw $t1, 8($s1)	
+	sw $t1, -8($s1)
+	sw $t1, -260($s1)
+	sw $t1, 260($s1)
+	sw $t1, 248($s1)
+	sw $t1, 264($s1)
+	sw $t1, 504($s1)
+	sw $t1, 520($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -504($s1)
+	sw $t1, -520($s1)
+	
+	jr $ra
+	
+write_game:
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 7252
+	li $t1, color_red
+	sw $t1, 4($s1)		# Letter G
+	sw $t1, 8($s1)
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 508($s1)
+	sw $t1, -264($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -508($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter A
+	sw $t1, 4($s1)
+	sw $t1, 8($s1)
+	sw $t1, -4($s1)
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 504($s1)
+	sw $t1, 520($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -508($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter M
+	sw $t1, 8($s1)
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 520($s1)
+	sw $t1, 504($s1)
+	sw $t1, -260($s1)
+	sw $t1, -252($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -520($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter E
+	sw $t1, -4($s1)
+	sw $t1, -8($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 520($s1)
+	sw $t1, 508($s1)
+	sw $t1, 504($s1)
+	sw $t1, -264($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -520($s1)
+	sw $t1, -508($s1)
+	sw $t1, -504($s1)
+	
+	jr $ra
+
+write_over:
+	la $s0, BASE_ADDRESS
+	addi $s1, $s0, 8788
+	li $t1, color_red
+	
+	sw $t1, 8($s1)		# Letter O
+	sw $t1, -8($s1)
+	sw $t1, 264($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 508($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -508($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 8($s1)		# Letter V
+	sw $t1, -8($s1)
+	sw $t1, 260($s1)
+	sw $t1, 252($s1)
+	sw $t1, 512($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -520($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter E
+	sw $t1, -4($s1)
+	sw $t1, -8($s1)
+	sw $t1, 248($s1)
+	sw $t1, 512($s1)
+	sw $t1, 516($s1)
+	sw $t1, 520($s1)
+	sw $t1, 508($s1)
+	sw $t1, 504($s1)
+	sw $t1, -264($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -520($s1)
+	sw $t1, -508($s1)
+	sw $t1, -504($s1)
+	
+	addi $s1, $s1, 24
+	sw $t1, 0($s1)		# Letter R
+	sw $t1, 4($s1)
+	sw $t1, 8($s1)
+	sw $t1, -4($s1)
+	sw $t1, -8($s1)
+	sw $t1, 260($s1)
+	sw $t1, 248($s1)
+	sw $t1, 520($s1)
+	sw $t1, 504($s1)
+	sw $t1, -264($s1)
+	sw $t1, -248($s1)
+	sw $t1, -512($s1)
+	sw $t1, -516($s1)
+	sw $t1, -520($s1)
+	sw $t1, -508($s1)
+	sw $t1, -504($s1)
+	
 	jr $ra
 end:
-	li $v0, 10
-	syscall
+	lw $t8, 0($t9)
+	bne $t8, 1, end
+	lw $t2, 4($t9)
+	beq $t2, 0x70, p_key
+	j end
