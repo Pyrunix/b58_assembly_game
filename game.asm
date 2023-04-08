@@ -14,7 +14,7 @@
 #
 # Which milestones have been reached in this submission?
 # (See the assignment handout for descriptions of the milestones)
-# - Milestone 1/2/3 (choose the one the applies)
+# - Milestone 3 
 #
 # Which approved features have been implemented for milestone 3?
 # (See the assignment handout for the list of additional features)
@@ -27,13 +27,13 @@
 # 
 #
 # Link to video demonstration for final submission:
-# - (insert YouTube / MyMedia / other URL here). Make sure we can view it!
+# - https://www.youtube.com/watch?v=FQqk2gyVbQQ
 #
 # Are you OK with us sharing the video with people outside course staff?
-# - yes / no / yes, and please share this project github link as well!
+# - yes
 #
 # Any additional information that the TA needs to know:
-# - (write here, if any)
+# - None
 #
 #####################################################################
 
@@ -77,6 +77,7 @@ xMovingPlatform:	.word	50	# Moving platform x position
 yMovingPlatform:	.word	40	# Moving platform y position
 movingPlatformRight:	.word	1	# Check if moving platform is going right
 platformTimer:		.word	2	# Delay for platform
+disappearTimer:		.word	20	# Timer for disappearing platform
 hit:		.word		0	# Check if player was hit
 dead:		.word		0	# Check if player has died
 xDoor:		.word		28	# Door x position
@@ -184,6 +185,8 @@ p_key:
 	sw $t1, yHeart
 	li $t1, 0
 	sw $t1, hit
+	li $t1, 20
+	sw $t1, disappearTimer
 	j main
 	
 f_key:
@@ -426,10 +429,20 @@ delay_platform:
 	beqz $t1, reset_platform_timer
 	addi $t1, $t1, -1
 	sw $t1, platformTimer
-	j delay_fps
+	j disappear_timer
 reset_platform_timer:
 	li $t1, 2
 	sw $t1, platformTimer
+	j disappear_timer
+disappear_timer:
+	lw $t1, disappearTimer
+	beqz $t1, reset_disappear
+	addi $t1, $t1, -1
+	sw $t1, disappearTimer
+	j delay_fps
+reset_disappear:
+	li $t1, 20
+	sw $t1, disappearTimer
 	j delay_fps
 delay_fps:
 	li $v0, 32	
@@ -727,6 +740,8 @@ floor_loop:
 	sw $t1, -16($s1)
 	addi $s1, $s1, -16
 	
+	lw $t2, disappearTimer
+	blt $t2, 10, shifted_platform
 	sw $t1, -28($s1)
 	sw $t1, -32($s1)
 	sw $t1, -36($s1)
@@ -738,6 +753,18 @@ floor_loop:
 	sw $t1, -60($s1)
 	sw $t1, -64($s1)
 	
+	jr $ra
+shifted_platform:
+	sw $t1, -36($s1)
+	sw $t1, -40($s1)
+	sw $t1, -44($s1)
+	sw $t1, -48($s1)
+	sw $t1, -52($s1)
+	sw $t1, -56($s1)
+	sw $t1, -60($s1)
+	sw $t1, -64($s1)
+	sw $t1, -68($s1)
+	sw $t1, -72($s1)
 	jr $ra
 
 delay_short:
